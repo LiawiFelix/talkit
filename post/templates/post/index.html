@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talk It</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l" crossorigin="anonymous">
+    <style>
+        div#main-container{
+            width: 50%;
+        }
+        @media only screen and (max-width: 600px) {
+            div#main-container{
+            width: 80%;
+        }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="main-container" style="padding: 0;">
+        <div class="form-group">
+            <p style="font-size: 24px; font-weight: bold;">Title</p>
+            <input class="form-control" id="title">
+        </div>
+        <div class="form-group">
+            <p style="font-size: 24px; font-weight: bold;">Content</p>
+            <textarea id="content" class="form-control"></textarea>
+        </div>
+        <button id="post-button" type="submit" class="btn btn-primary" style="width: 100px; margin-bottom: 50px;">Post</button>
+        <div id="all-post" style="margin-top: 40px;">
+        </div>
+    </div>
+    
+    <script>
+        let i=0;
+        const title_list=[];
+        const content_list=[];
+        const socket= new WebSocket('ws://'+window.location.host+'/ws/');
+        // terima message
+        socket.onmessage= function(e){
+            const data = JSON.parse(e.data);
+            if(data.title){
+                document.querySelector('#all-post').innerHTML +=
+                `<div class="card" style="width: 100%; margin-bottom: 20px; margin-top: 20px">
+                    <div class="row" style="margin:0">
+                        <div class="column" style="width: 20%; align-items: center; text-align: center; max-height:150px">
+                            <div class="dropup" style="background:transparent; height:44%; display: flex; align-items: center; justify-content: center;">
+                                <a class="btn btn-success dropdown-toggle" id="upvote-`+i+`" role="button" ></a>
+                            </div>
+                            <div class="dropdown" id="votes-`+i+`" style="background:transparent; height:12%; display: flex; align-items: center; justify-content: center; font-weight: bold;">`+data.votes+`
+                            </div>
+                            <div class="dropdown" style="background:transparent; height:44%; display: flex; align-items: center; justify-content: center;">
+                                <a class="btn btn-danger dropdown-toggle" id="downvote-`+i+`" role="button"></a>
+                            </div>
+                        </div>
+                        <div class="column" style="width: 80%; padding-left: 10px;">
+                            <div class="card-body" style="width: 100%;">
+                                <h5 class="card-title" style="font-size: 25px">`+data.title+`</h5>
+                                <p class="card-text" style="font-size: 18px">`+data.content+`</p>
+                                <hr>
+                                <div id="list-comment-`+i+`" style="font-size: 12px">
+                                </div>
+                                <div id="div-comment-`+i+`" style="margin-top: 10px">
+                                    <a class="btn btn-primary" id="reply-enter-`+i+`" class="card-link" style="font-weight: bold;">Reply</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+                i++;
+            }else if(data.comment){
+                const listCommentDOM= document.querySelector("#list-comment-"+data.num);
+                listCommentDOM.innerHTML += data.comment + `<br><hr>`;
+            }
+            else{
+                var inc_but= document.querySelector("#votes-"+data.num)
+                try{
+                    inc_but.innerHTML = data.votes;
+                }catch{
+                    
+                }
+            }
+            
+        }
+
+        var all_post= document.querySelector("#all-post");
+        all_post.addEventListener("click", addorsub, false);
+        function addorsub(e){
+            if(e.target!==e.currentTarget){
+                var clickItem= e.target.id;
+
+                let type=String(clickItem).split('-')[0];
+                let num=String(clickItem).split('-')[1];
+                if(type==="upvote"){
+                    var inc_but= document.querySelector("#votes-"+num)
+                    socket.send(JSON.stringify({
+                        'num':num,
+                        'votes': parseInt(inc_but.innerHTML) + 1
+                    }))
+                }else if(type==="downvote"){
+                    var inc_but= document.querySelector("#votes-"+num)
+                    socket.send(JSON.stringify({
+                        'num':num,
+                        'votes': parseInt(inc_but.innerHTML) - 1
+                    }))
+                }else if(type==="cancel" || type==="reply"){
+                    let num_num=String(clickItem).split('-')[2];
+                    var div_comment= document.querySelector("#div-comment-"+num_num);
+                    if(type=="reply" && num=="enter"){
+                        div_comment.innerHTML=`
+                            <div class="row" style="margin:0;">
+                                <input class="form-control" id="input-comment-`+num_num+`" style="width: 70%; margin-right: 5px">
+                                <a class="btn btn-primary" id="reply-comment-`+num_num+`" class="card-link" data-toggle="collapse" href="#collapseType" style="font-weight: bold; margin-right:5px">Reply</a>
+                                <a class="btn btn-secondary" id="cancel-comment-`+num_num+`" class="card-link" data-toggle="collapse" href="#collapseType" style="font-weight: bold;">Cancel</a>
+                            </div>`;
+                    }else if(type=="reply" && num=="comment"){
+                        let num_num=String(clickItem).split('-')[2];
+                        const inputCommentDOM= document.querySelector('#input-comment-'+num_num);
+                        const inputCommentValue= inputCommentDOM.value;
+                        if(String(inputCommentValue).trim().length>0 ){
+                            socket.send(JSON.stringify({
+                                'num':num_num,
+                                'comment': inputCommentValue
+                            }))
+                        }
+                        div_comment.innerHTML=`<a class="btn btn-primary" id="reply-enter-`+num_num+`" class="card-link" style="font-weight: bold;">Reply</a>`;
+                    }else if(type=="cancel" && num=="comment"){
+                        div_comment.innerHTML=`<a class="btn btn-primary" id="reply-enter-`+num_num+`" class="card-link" style="font-weight: bold;">Reply</a>`;
+                    }
+                }
+            }
+        }
+        socket.onclose= function(e){
+            console.error('Socket closed unexpectedly');
+        };
+        document.querySelector('#post-button').onclick= function(e){
+            const titleDOM= document.querySelector('#title');
+            const contentDOM= document.querySelector('#content');
+            const titleInput= document.querySelector('#title').value;
+            const contentInput= document.querySelector('#content').value;
+            socket.send(JSON.stringify({
+                'title':titleInput,
+                'content':contentInput
+            }))
+            titleDOM.value='';
+            contentDOM.value='';
+        }
+        
+    </script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.min.js" integrity="sha384-+YQ4JLhjyBLPDQt//I+STsc9iw4uQqACwlvpslubQzn4u2UU2UFM80nGisd026JF" crossorigin="anonymous"></script>
+</body>
+<footer style="margin-top: 5%;">
+
+</footer>
+</html>
